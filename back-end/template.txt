@@ -1,0 +1,3 @@
+-uwu -l "log.json" -m "" -o "log.json" -r
+
+-uwu2 -l "log3.json" -m "" -o "log3.json" -r
