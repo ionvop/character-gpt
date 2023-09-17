@@ -10,15 +10,16 @@ class Gpt {
     // return: [result: "", full-prompt: ""]
     public function Send($settings, $log, $message) {
         $temp = $settings;
-        $data = array();
+        $data = [];
 
-        $settings = array();
-            $settings["system"] = "";
-            $settings["dialogue"] = array();
-            $settings["memory"] = 0;
-            $settings["pre-prompt"] = "";
-            $settings["mid-prompt"] = "";
-            $settings["post-prompt"] = "";
+        $settings = [
+            "system" => "",
+            "dialogue" => [],
+            "memory" => 0,
+            "pre-prompt" => "",
+            "mid-prompt" => "",
+            "post-prompt" => ""
+        ];
 
         foreach ($temp as $key => $value) {
             $settings[$key] = $value;
@@ -58,13 +59,15 @@ class Gpt {
 
         $data[] = $this->item("user", $settings["pre-prompt"].$message.$settings["mid-prompt"]);
 
-        $curlHead = array();
-            $curlHead[] = "Content-Type: application/json";
-            $curlHead[] = "Authorization: Bearer {$this->apiKey}";
+        $curlHead = [
+            "Content-Type: application/json",
+            "Authorization: Bearer {$this->apiKey}"
+        ];
 
-        $curlData = array();
-            $curlData["model"] = $this->model;
-            $curlData["messages"] = $data;
+        $curlData = [
+            "model" => $this->model,
+            "messages" => $data
+        ];
 
         $response = $this->SendCurl($this->completion, "POST", $curlHead, json_encode($curlData));
         $response = json_decode($response, true);
@@ -78,7 +81,7 @@ class Gpt {
             $data[] = $response["choices"][0]["message"];
         }
 
-        $result = array();
+        $result = [];
 
         foreach ($log as $key => $value) {
             $result[] = $value;
@@ -87,18 +90,20 @@ class Gpt {
         $result[] = $this->item("user", $message);
         $result[] = $response["choices"][0]["message"];
 
-        $out = array();
-            $out["result"] = $result;
-            $out["full-prompt"] = $data;
-            $out["tokens"] = $response["usage"]["total_tokens"];
+        $out = [
+            "result" => $result,
+            "full-prompt" => $data,
+            "response" => $response
+        ];
 
         return $out;
     }
 
     protected function item($role, $content) {
-        $result = array();
-            $result["role"] = $role;
-            $result["content"] = $content;
+        $result = [
+            "role" => $role,
+            "content" => $content
+        ];
 
         return $result;
     }
@@ -134,40 +139,53 @@ class Gpt {
 class Char extends Gpt {
     private $settings;
     private $char;
-    private $user;
-    public $log = "chat.json";
+    public $log = [];
+    public $chatLogPath = "";
+    public $dataLogPath = "";
+    public $jailbreakMode = 0;
+    public $greeting = false;
 
-    function __construct($char, $user, $jailbreakMode = 0, $assumeScenario = false) {
-        $char = $this->GetCharData($char);
+    function __construct($charData = null, $jailbreakMode = 0, $greeting = false) {
+        $this->jailbreakMode = $jailbreakMode;
+        $this->greeting = $greeting;
 
-        $settings = array();
-            $settings["system"] = file_get_contents("char/system.txt");
-            $settings["dialogue"] = array();
-            $settings["mid-prompt"] =  "[Try to summarize your response in 2 or below sentences. Do not include your hidden feelings and only show what the user is able to see]";
+        if ($charData != null) {
+            $this->Initialize($charData, $jailbreakMode, $greeting);
+        }
+    }
+
+    public function Initialize($charData) {
+        $this->char = $charData;
+
+        $settings = [
+            "system" => $this->char["system"],
+            "dialogue" => [],
+            "mid-prompt" =>  "[Try to summarize your response in 2 or below sentences. Do not include your hidden feelings and only show what the user is able to see]"
+        ];
         
-        switch ($jailbreakMode) {
+        switch ($this->jailbreakMode) {
             case 0:
-                $settings["dialogue"][] = $this->item("user", file_get_contents("char/jailbreak.txt"));
+                $settings["dialogue"][] = $this->item("user", $this->char["jailbreak"]);
                 break;
             case 1:
-                $settings["pre-prompt"] = file_get_contents("char/jailbreak.txt");
+                $settings["pre-prompt"] = $this->char["jailbreak"];
                 break;
         }
 
-        $settings["dialogue"][] = $this->item("user", "[Your character is {$char["name"]}]");
-        $content = $char["description"];
-        $content = str_replace("{{user}}", $user, $content);
-        $content = str_replace("{{char}}", $char["name"], $content);
+        $settings["dialogue"][] = $this->item("user", "[Your character is {$this->char["name"]} conversing with {$this->char["user"]}]");
+        $content = $this->char["description"];
+        $content = str_replace("{{user}}", $this->char["user"], $content);
+        $content = str_replace("{{char}}", $this->char["name"], $content);
         $settings["dialogue"][] = $this->item("user", $content);
             
-        if (count($char["dialogue"]) > 0) {
+        if (count($this->char["dialogue"]) > 0) {
             $settings["dialogue"][] = $this->item("user", "[Begin example dialogue]");
 
-            foreach ($char["dialogue"] as $key => $value) {
+            foreach ($this->char["dialogue"] as $key => $value) {
                 $role = substr($value, 0, strpos($value, ":"));
                 $content = substr($value, strpos($value, ":") + 1);
-                $content = str_replace("{{user}}", $user, $content);
-                $content = str_replace("{{char}}", $char["name"], $content);
+                $content = str_replace("{{user}}", $this->char["user"], $content);
+                $content = str_replace("{{char}}", $this->char["name"], $content);
 
                 switch ($role) {
                     case "{{user}}":
@@ -184,55 +202,61 @@ class Char extends Gpt {
             $settings["dialogue"][] = $this->item("user", "[Begin roleplay]");
         }
 
-        if ($assumeScenario) {
-            $log = file_get_contents($this->log);
-            $log = json_decode($log, true);
-
-            if (count($log) == 0) {
-                $content = $char["scenario"];
-                $content = str_replace("{{user}}", $user, $content);
-                $content = str_replace("{{char}}", $char["name"], $content);
-                $log[] = $this->item("assistant", $content);
+        if ($this->greeting) {
+            if (count($this->log) == 0) {
+                $content = $this->char["scenario"];
+                $content = str_replace("{{user}}", $this->char["user"], $content);
+                $content = str_replace("{{char}}", $this->char["name"], $content);
+                $this->log[] = $this->item("assistant", $content);
             }
-
-            file_put_contents($this->log, json_encode($log));
         } else {
-            $content = $char["scenario"];
-            $content = str_replace("{{user}}", $user, $content);
-            $content = str_replace("{{char}}", $char["name"], $content);
+            $content = $this->char["scenario"];
+            $content = str_replace("{{user}}", $this->char["user"], $content);
+            $content = str_replace("{{char}}", $this->char["name"], $content);
             $settings["dialogue"][] = $this->item("assistant", $content);
         }
 
         $this->settings = $settings;
-        $this->user = $user;
-        $this->char = $char;
     }
 
     public function Chat($message) {
-        $log = file_get_contents($this->log);
-        $log = json_decode($log, true);
-        $response = $this->Send($this->settings, $log, $message);
+        if ($this->chatLogPath != "") {
+            if (file_exists($this->chatLogPath) == false) {
+                file_put_contents($this->chatLogPath, "[]");
+            }
 
-        $logData = array();
-            $logData["prompt"] = $response["full-prompt"];
-            $logData["tokens"] = $response["tokens"];
+            $this->log = file_get_contents($this->chatLogPath);
+            $this->log = json_decode($this->log, true);
+        }
 
-        file_put_contents("log/".date("Y-m-d H-i-s").".json", json_encode($logData));
-        file_put_contents($this->log, json_encode($response["result"]));
+        $response = $this->Send($this->settings, $this->log, $message);
+
+        if ($this->dataLogPath != "") {
+            if (substr($this->dataLogPath, -1) != "/" && substr($this->dataLogPath, -1) != "\\") {
+                $this->dataLogPath .= "/";
+            }
+
+            file_put_contents($this->dataLogPath.date("Y-m-d H-i-s").".json", json_encode($response));
+        }
+        
         return $response;
     }
 
-    private function GetCharData($char) {
-        $result = array();
-            $result["description"] = file_get_contents("char/{$char}/description.txt");
-            $result["dialogue"] = array();
-            $result["name"] = file_get_contents("char/{$char}/name.txt");
-            $result["scenario"] = file_get_contents("char/{$char}/scenario.txt");
+    public function SetCharDataByFolder($char, $user) {
+        $result = [
+            "system" => file_get_contents("char/system.txt"),
+            "jailbreak" => file_get_contents("char/jailbreak.txt"),
+            "description" => file_get_contents("char/{$char}/description.txt"),
+            "dialogue" => [],
+            "name" => file_get_contents("char/{$char}/name.txt"),
+            "scenario" => file_get_contents("char/{$char}/scenario.txt"),
+            "user" => $user
+        ];
 
         $dialogue = file_get_contents("char/{$char}/dialogue.txt");
         $dialogue = explode("\n", $dialogue);
         $result["dialogue"] = $dialogue;
-        return $result;
+        $this->char = $result;
     }
 }
 
