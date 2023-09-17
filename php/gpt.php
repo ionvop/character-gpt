@@ -89,8 +89,14 @@ class Gpt {
 
         $result[] = $this->item("user", $message);
         $result[] = $response["choices"][0]["message"];
+        $reply = "";
+
+        if ($response["choices"] != null) {
+            $reply = $response["choices"][0]["message"]["content"];
+        }
 
         $out = [
+            "reply" => $reply,
             "result" => $result,
             "full-prompt" => $data,
             "response" => $response
@@ -137,25 +143,46 @@ class Gpt {
 }
 
 class Char extends Gpt {
-    private $settings;
-    private $char;
     public $log = [];
     public $chatLogPath = "";
     public $dataLogPath = "";
     public $jailbreakMode = 0;
     public $greeting = false;
 
+    public $char = [
+        "system" => "",
+        "jailbreak" => "",
+        "name" => "",
+        "user" => "",
+        "description" => "",
+        "dialogue" => [],
+        "scenario" => ""
+    ];
+
     function __construct($charData = null, $jailbreakMode = 0, $greeting = false) {
         $this->jailbreakMode = $jailbreakMode;
         $this->greeting = $greeting;
 
         if ($charData != null) {
-            $this->Initialize($charData, $jailbreakMode, $greeting);
+            $this->char = $charData;
         }
     }
 
-    public function Initialize($charData) {
-        $this->char = $charData;
+    public function Chat($message) {
+        if ($this->chatLogPath != "") {
+            if (file_exists($this->chatLogPath) == false) {
+                $this->log = [];
+
+                if ($this->greeting) {
+                    $this->log[] = $this->item("assistant", $this->char["scenario"]);
+                }
+
+                file_put_contents($this->chatLogPath, json_encode($this->log));
+            }
+
+            $this->log = file_get_contents($this->chatLogPath);
+            $this->log = json_decode($this->log, true);
+        }
 
         $settings = [
             "system" => $this->char["system"],
@@ -216,20 +243,7 @@ class Char extends Gpt {
             $settings["dialogue"][] = $this->item("assistant", $content);
         }
 
-        $this->settings = $settings;
-    }
-
-    public function Chat($message) {
-        if ($this->chatLogPath != "") {
-            if (file_exists($this->chatLogPath) == false) {
-                file_put_contents($this->chatLogPath, "[]");
-            }
-
-            $this->log = file_get_contents($this->chatLogPath);
-            $this->log = json_decode($this->log, true);
-        }
-
-        $response = $this->Send($this->settings, $this->log, $message);
+        $response = $this->Send($settings, $this->log, $message);
 
         if ($this->dataLogPath != "") {
             if (substr($this->dataLogPath, -1) != "/" && substr($this->dataLogPath, -1) != "\\") {
@@ -237,6 +251,10 @@ class Char extends Gpt {
             }
 
             file_put_contents($this->dataLogPath.date("Y-m-d H-i-s").".json", json_encode($response));
+        }
+
+        if ($this->chatLogPath != "") {
+            file_put_contents($this->chatLogPath, json_encode($response["result"]));
         }
         
         return $response;
@@ -246,11 +264,11 @@ class Char extends Gpt {
         $result = [
             "system" => file_get_contents("char/system.txt"),
             "jailbreak" => file_get_contents("char/jailbreak.txt"),
+            "name" => file_get_contents("char/{$char}/name.txt"),
+            "user" => $user,
             "description" => file_get_contents("char/{$char}/description.txt"),
             "dialogue" => [],
-            "name" => file_get_contents("char/{$char}/name.txt"),
-            "scenario" => file_get_contents("char/{$char}/scenario.txt"),
-            "user" => $user
+            "scenario" => file_get_contents("char/{$char}/scenario.txt")
         ];
 
         $dialogue = file_get_contents("char/{$char}/dialogue.txt");
