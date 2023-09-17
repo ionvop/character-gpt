@@ -2,7 +2,7 @@
 
 class Gpt {
     public $apiKey = "";
-    public $completion = "https://api.openai.com/v1/chat/completions";
+    public $baseUrl = "https://api.openai.com/v1/chat/completions";
     public $model = "gpt-3.5-turbo";
 
     // settings: [system: "", dialogue: [[:]], memory: 0, pre-prompt: "", mid-prompt: "", post-prompt: ""]
