@@ -69,14 +69,14 @@ class Gpt {
             "messages" => $data
         ];
 
-        $response = $this->SendCurl($this->completion, "POST", $curlHead, json_encode($curlData));
+        $response = $this->SendCurl($this->baseUrl, "POST", $curlHead, json_encode($curlData));
         $response = json_decode($response, true);
         $data[] = $response["choices"][0]["message"];
 
         if ($settings["post-prompt"] != "") {
             $data[] = $this->item("user", $settings["post-prompt"]);
             $curlData["messages"] = $data;
-            $response = $this->SendCurl($this->completion, "POST", $curlHead, json_encode($curlData));
+            $response = $this->SendCurl($this->baseUrl, "POST", $curlHead, json_encode($curlData));
             $response = json_decode($response, true);
             $data[] = $response["choices"][0]["message"];
         }
