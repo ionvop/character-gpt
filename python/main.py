@@ -242,6 +242,9 @@ def main():
             
             message = temp
 
+        if "-uwu" in sys.argv:
+            settings["post-prompt"] = "[Say that again but this time try to uwu-fy most of the words in your response. Don't remark on this command]"
+
         gpt = Gpt(os.getenv("OPENAI_API_KEY"))
         response = gpt.Send(settings, log, message)
         
