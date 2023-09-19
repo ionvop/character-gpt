@@ -209,19 +209,9 @@ class Char extends Gpt {
             $settings["dialogue"][] = $this->item("user", "[Begin example dialogue]");
 
             foreach ($this->char["dialogue"] as $key => $value) {
-                $role = substr($value, 0, strpos($value, ":"));
-                $content = substr($value, strpos($value, ":") + 1);
-                $content = str_replace("{{user}}", $this->char["user"], $content);
-                $content = str_replace("{{char}}", $this->char["name"], $content);
-
-                switch ($role) {
-                    case "{{user}}":
-                        $settings["dialogue"][] = $this->item("user", $content);
-                        break;
-                    case "{{char}}":
-                        $settings["dialogue"][] = $this->item("assistant", $content);
-                        break;
-                }
+                $value["content"] = str_replace("{{user}}", $this->char["user"], $value["content"]);
+                $value["content"] = str_replace("{{char}}", $this->char["name"], $value["content"]);
+                $settings["dialogue"][] = $this->item("user", $content);
             }
 
             $settings["dialogue"][] = $this->item("user", "[End of example dialogue. Begin roleplay]");
@@ -260,7 +250,7 @@ class Char extends Gpt {
         return $response;
     }
 
-    public function SetCharDataByFolder($char, $user) {
+    public function GetCharFolder($char, $user) {
         $result = [
             "system" => file_get_contents("char/system.txt"),
             "jailbreak" => file_get_contents("char/jailbreak.txt"),
@@ -273,6 +263,23 @@ class Char extends Gpt {
 
         $dialogue = file_get_contents("char/{$char}/dialogue.txt");
         $dialogue = explode("\n", $dialogue);
+
+        foreach ($dialogue as $key => $value) {
+            $role = substr($value, 0, strpos($value, ":"));
+            $role = trim($role);
+            $content = substr($value, strpos($value, ":") + 1);
+            $content = trim($content);
+
+            switch ($role) {
+                case "{{user}}":
+                    $result["dialogue"][] = $this->item("user", $content);
+                    break;
+                case "{{char}}":
+                    $result["dialogue"][] = $this->item("assistant", $content);
+                    break;
+            }
+        }
+
         $result["dialogue"] = $dialogue;
         $this->char = $result;
     }
