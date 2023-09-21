@@ -4,60 +4,53 @@ class Gpt {
     public $apiKey = "";
     public $baseUrl = "https://api.openai.com/v1/chat/completions";
     public $model = "gpt-3.5-turbo";
+    public $log = [];
 
-    // settings: [system: "", dialogue: [[:]], memory: 0, pre-prompt: "", mid-prompt: "", post-prompt: ""]
-    // log: [[:]], message: ""
-    // return: [result: "", full-prompt: ""]
-    public function Send($settings, $log, $message) {
-        $temp = $settings;
+    public $settings = [
+        "system" => "",
+        "dialogue" => [],
+        "memory" => 0,
+        "pre-prompt" => "",
+        "mid-prompt" => "",
+        "post-prompt" => ""
+    ];
+
+    public function Send($message) {
         $data = [];
 
-        $settings = [
-            "system" => "",
-            "dialogue" => [],
-            "memory" => 0,
-            "pre-prompt" => "",
-            "mid-prompt" => "",
-            "post-prompt" => ""
-        ];
-
-        foreach ($temp as $key => $value) {
-            $settings[$key] = $value;
+        if ($this->settings["system"] != "") {
+            $data[] = $this->item("system", $this->settings["system"]);
         }
 
-        if ($settings["system"] != "") {
-            $data[] = $this->item("system", $settings["system"]);
-        }
-
-        foreach ($settings["dialogue"] as $key => $value) {
+        foreach ($this->settings["dialogue"] as $key => $value) {
             $data[] =  $value;
         }
 
-        if ($settings["pre-prompt"] != "") {
-            $settings["pre-prompt"] .= "\n\n";
+        if ($this->settings["pre-prompt"] != "") {
+            $this->settings["pre-prompt"] .= "\n\n";
         }
 
-        if ($settings["mid-prompt"] != "") {
-            $settings["mid-prompt"] = "\n\n".$settings["mid-prompt"];
+        if ($this->settings["mid-prompt"] != "") {
+            $this->settings["mid-prompt"] = "\n\n".$this->settings["mid-prompt"];
         }
 
-        if ($settings["memory"] == 0) {
-            foreach ($log as $key => $value) {
+        if ($this->settings["memory"] == 0) {
+            foreach ($this->log as $key => $value) {
                 $data[] = $value;
             }
         } else {
-            $min = count($log) - $settings["memory"];
+            $min = count($this->log) - $this->settings["memory"];
 
             if ($min < 0) {
                 $min = 0;
             }
 
-            for ($i = $min; $i < count($log); $i++) {
-                $data[] = $log[$i];
+            for ($i = $min; $i < count($this->log); $i++) {
+                $data[] = $this->log[$i];
             }
         }
 
-        $data[] = $this->item("user", $settings["pre-prompt"].$message.$settings["mid-prompt"]);
+        $data[] = $this->item("user", $this->settings["pre-prompt"].$message.$this->settings["mid-prompt"]);
 
         $curlHead = [
             "Content-Type: application/json",
@@ -73,36 +66,28 @@ class Gpt {
         $response = json_decode($response, true);
         $data[] = $response["choices"][0]["message"];
 
-        if ($settings["post-prompt"] != "") {
-            $data[] = $this->item("user", $settings["post-prompt"]);
+        if ($this->settings["post-prompt"] != "") {
+            $data[] = $this->item("user", $this->settings["post-prompt"]);
             $curlData["messages"] = $data;
             $response = $this->SendCurl($this->baseUrl, "POST", $curlHead, json_encode($curlData));
             $response = json_decode($response, true);
             $data[] = $response["choices"][0]["message"];
         }
 
-        $result = [];
-
-        foreach ($log as $key => $value) {
-            $result[] = $value;
-        }
-
-        $result[] = $this->item("user", $message);
-        $result[] = $response["choices"][0]["message"];
-        $reply = "";
-
-        if ($response["choices"] != null) {
-            $reply = $response["choices"][0]["message"]["content"];
-        }
-
-        $out = [
-            "reply" => $reply,
-            "result" => $result,
+        $result = [
+            "reply" => $response["choices"][0]["message"]["content"],
+            "result" => [],
             "full-prompt" => $data,
             "response" => $response
         ];
 
-        return $out;
+        foreach ($this->log as $key => $value) {
+            $result["result"][] = $value;
+        }
+
+        $result["result"][] = $this->item("user", $message);
+        $result["result"][] = $response["choices"][0]["message"];
+        return $result;
     }
 
     protected function item($role, $content) {
@@ -143,7 +128,6 @@ class Gpt {
 }
 
 class Char extends Gpt {
-    public $log = [];
     public $chatLogPath = "";
     public $dataLogPath = "";
     public $jailbreakMode = 0;
@@ -159,7 +143,7 @@ class Char extends Gpt {
         "scenario" => ""
     ];
 
-    function __construct($charData = null, $jailbreakMode = 0, $greeting = false) {
+    function __construct($jailbreakMode = 0, $greeting = false, $charData = null) {
         $this->jailbreakMode = $jailbreakMode;
         $this->greeting = $greeting;
 
@@ -183,40 +167,34 @@ class Char extends Gpt {
             $this->log = file_get_contents($this->chatLogPath);
             $this->log = json_decode($this->log, true);
         }
-
-        $settings = [
-            "system" => $this->char["system"],
-            "dialogue" => [],
-            "mid-prompt" =>  "[Try to summarize your response in 2 or below sentences. Do not include your hidden feelings and only show what the user is able to see]"
-        ];
         
         switch ($this->jailbreakMode) {
             case 0:
-                $settings["dialogue"][] = $this->item("user", $this->char["jailbreak"]);
+                $this->settings["dialogue"][] = $this->item("user", $this->char["jailbreak"]);
                 break;
             case 1:
-                $settings["pre-prompt"] = $this->char["jailbreak"];
+                $this->settings["pre-prompt"] = $this->char["jailbreak"];
                 break;
         }
 
-        $settings["dialogue"][] = $this->item("user", "[Your character is {$this->char["name"]} conversing with {$this->char["user"]}]");
+        $this->settings["dialogue"][] = $this->item("user", "[Your character is {$this->char["name"]} conversing with {$this->char["user"]}]");
         $content = $this->char["description"];
         $content = str_replace("{{user}}", $this->char["user"], $content);
         $content = str_replace("{{char}}", $this->char["name"], $content);
-        $settings["dialogue"][] = $this->item("user", $content);
+        $this->settings["dialogue"][] = $this->item("user", $content);
             
         if (count($this->char["dialogue"]) > 0) {
-            $settings["dialogue"][] = $this->item("user", "[Begin example dialogue]");
+            $this->settings["dialogue"][] = $this->item("user", "[Begin example dialogue]");
 
             foreach ($this->char["dialogue"] as $key => $value) {
                 $value["content"] = str_replace("{{user}}", $this->char["user"], $value["content"]);
                 $value["content"] = str_replace("{{char}}", $this->char["name"], $value["content"]);
-                $settings["dialogue"][] = $this->item("user", $content);
+                $this->settings["dialogue"][] = $this->item("user", $content);
             }
 
-            $settings["dialogue"][] = $this->item("user", "[End of example dialogue. Begin roleplay]");
+            $this->settings["dialogue"][] = $this->item("user", "[End of example dialogue. Begin roleplay]");
         } else {
-            $settings["dialogue"][] = $this->item("user", "[Begin roleplay]");
+            $this->settings["dialogue"][] = $this->item("user", "[Begin roleplay]");
         }
 
         if ($this->greeting) {
@@ -230,10 +208,10 @@ class Char extends Gpt {
             $content = $this->char["scenario"];
             $content = str_replace("{{user}}", $this->char["user"], $content);
             $content = str_replace("{{char}}", $this->char["name"], $content);
-            $settings["dialogue"][] = $this->item("assistant", $content);
+            $this->settings["dialogue"][] = $this->item("assistant", $content);
         }
 
-        $response = $this->Send($settings, $this->log, $message);
+        $response = $this->Send($this->settings, $this->log, $message);
 
         if ($this->dataLogPath != "") {
             if (substr($this->dataLogPath, -1) != "/" && substr($this->dataLogPath, -1) != "\\") {

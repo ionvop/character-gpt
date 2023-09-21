@@ -18,7 +18,7 @@ sub Main()
     end with
 
     set chatLog = new aspJSON
-    chatLog.loadJSON(objFile.OpenTextFile(directory & "\chat.json").ReadAll())
+    chatLog.loadJSON("[]")
     set data = Send(settings, chatLog, "What's the random fact of the day?")
     Breakpoint(data.Data("reply"))
 end sub
@@ -44,11 +44,11 @@ function Send(settings, chatLog, message)
     end if
 
     if len(settings.Data("pre-prompt")) > 0 then
-        message = settings.Data("pre-prompt") & vbcrlf & vbcrlf & message
+        settings.Data("pre-prompt") = settings.Data("pre-prompt") & vbcrlf & vbcrlf
     end if
 
     if len(settings.Data("mid-prompt")) > 0 then
-        message = message & vbcrlf & vbcrlf & settings.Data("mid-prompt")
+        settings.Data("mid-prompt") = vbcrlf & vbcrlf & settings.Data("mid-prompt")
     end if
 
     with data.Data
@@ -103,7 +103,7 @@ function Send(settings, chatLog, message)
     
             with .Item(n)
                 .Add "role", "user"
-                .Add "content", message
+                .Add "content", settings.Data("pre-prompt") & message & settings.Data("mid-prompt")
                 n = n + 1
             end with
         end with
