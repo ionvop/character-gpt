@@ -2,7 +2,7 @@
 
 class Gpt {
     public $apiKey = "";
-    public $baseUrl = "https://api.openai.com/v1/chat/completions";
+    public $apiUrl = "https://api.openai.com/v1/chat/completions";
     public $model = "gpt-3.5-turbo";
     public $log = [];
 
@@ -14,6 +14,10 @@ class Gpt {
         "mid-prompt" => "",
         "post-prompt" => ""
     ];
+
+    function __construct($apiKey = "") {
+        $this->apiKey = $apiKey;
+    }
 
     public function Send($message) {
         $data = [];
@@ -62,14 +66,14 @@ class Gpt {
             "messages" => $data
         ];
 
-        $response = $this->SendCurl($this->baseUrl, "POST", $curlHead, json_encode($curlData));
+        $response = $this->SendCurl($this->apiUrl, "POST", $curlHead, json_encode($curlData));
         $response = json_decode($response, true);
         $data[] = $response["choices"][0]["message"];
 
         if ($this->settings["post-prompt"] != "") {
             $data[] = $this->item("user", $this->settings["post-prompt"]);
             $curlData["messages"] = $data;
-            $response = $this->SendCurl($this->baseUrl, "POST", $curlHead, json_encode($curlData));
+            $response = $this->SendCurl($this->apiUrl, "POST", $curlHead, json_encode($curlData));
             $response = json_decode($response, true);
             $data[] = $response["choices"][0]["message"];
         }
@@ -131,7 +135,7 @@ class Char extends Gpt {
     public $chatLogPath = "";
     public $dataLogPath = "";
     public $jailbreakMode = 0;
-    public $greeting = false;
+    public $includeGreeting = false;
 
     public $char = [
         "system" => "",
@@ -143,9 +147,10 @@ class Char extends Gpt {
         "scenario" => ""
     ];
 
-    function __construct($jailbreakMode = 0, $greeting = false, $charData = null) {
+    function __construct($apiKey = "", $jailbreakMode = 0, $includeGreeting = false, $charData = null) {
+        $this->apiKey = $apiKey;
         $this->jailbreakMode = $jailbreakMode;
-        $this->greeting = $greeting;
+        $this->includeGreeting = $includeGreeting;
 
         if ($charData != null) {
             $this->char = $charData;
@@ -157,7 +162,7 @@ class Char extends Gpt {
             if (file_exists($this->chatLogPath) == false) {
                 $this->log = [];
 
-                if ($this->greeting) {
+                if ($this->includeGreeting) {
                     $this->log[] = $this->item("assistant", $this->char["scenario"]);
                 }
 
@@ -197,7 +202,7 @@ class Char extends Gpt {
             $this->settings["dialogue"][] = $this->item("user", "[Begin roleplay]");
         }
 
-        if ($this->greeting) {
+        if ($this->includeGreeting) {
             if (count($this->log) == 0) {
                 $content = $this->char["scenario"];
                 $content = str_replace("{{user}}", $this->char["user"], $content);
@@ -211,7 +216,7 @@ class Char extends Gpt {
             $this->settings["dialogue"][] = $this->item("assistant", $content);
         }
 
-        $response = $this->Send($this->settings, $this->log, $message);
+        $response = $this->Send($message);
 
         if ($this->dataLogPath != "") {
             if (substr($this->dataLogPath, -1) != "/" && substr($this->dataLogPath, -1) != "\\") {
