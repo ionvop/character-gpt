@@ -9,7 +9,7 @@ Include(directory & "\aspJSON.vbs")
 set objJson = new aspJSON
 
 sub Main()
-    dim settings, chatLog, data
+    dim settings, chatLog, res
     set settings = new aspJSON
     settings.loadJSON(objFile.OpenTextFile(directory & "\settings.json").ReadAll())
 
@@ -19,8 +19,8 @@ sub Main()
 
     set chatLog = new aspJSON
     chatLog.loadJSON("[]")
-    set data = Send(settings, chatLog, "What's the random fact of the day?")
-    Breakpoint(data.Data("reply"))
+    set res = Send(settings, chatLog, "What's the random fact of the day?")
+    Breakpoint(res.Data("reply"))
 end sub
 
 function Send(settings, chatLog, message)
@@ -112,7 +112,6 @@ function Send(settings, chatLog, message)
     set headers = CreateObject("Scripting.Dictionary")
     headers.Add "Content-Type", "application/json"
     headers.Add "Authorization", "Bearer " & apiKey
-
     resData = Curl(apiUrl, "POST", headers, data.JSONoutput())
     set res = new aspJSON
     res.loadJSON(resData)
@@ -150,15 +149,11 @@ function Send(settings, chatLog, message)
     set temp2 = new aspJSON
 
     with temp2.Data
-        .Add "message", temp2.Collection()
-
-        with .Item("message")
-            .Add "role", "user"
-            .Add "content", message
-        end with
+        .Add "role", "user"
+        .Add "content", message
     end with
 
-    Push temp, temp2.Data.Item("message")
+    Push temp, temp2.Data
     Push temp, res.Data("choices").Item(0).Item("message")
     set result = new aspJSON
 
@@ -172,28 +167,8 @@ function Send(settings, chatLog, message)
             next
         end with
 
-        .Add "full-prompt", result.Collection()
-
-        with .Item("full-prompt")
-            for each key in data.Data("messages")
-                set element = data.Data("messages").Item(key)
-                .Add key, element
-            next
-        end with
-
-        .Add "response", result.Collection()
-
-        with .Item("response")
-            for each key in res.Data
-                if typename(res.Data.Item(key)) = "Dictionary" then
-                    set element = res.Data.Item(key)
-                else
-                    element = res.Data.Item(key)
-                end if
-
-                .Add key, element
-            next
-        end with
+        .Add "full-prompt", data.Data.Item("messages")
+        .Add "response", res.Data
     end with
 
     set Send = result
