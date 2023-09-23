@@ -259,6 +259,9 @@ def main():
             gpt.settings["post-prompt"] = "[Say that again but this time try to uwu-fy most of the words in your response. Don't remark on this command]"
 
         response = gpt.Send(message)
+
+        if "-o" in sys.argv:
+            open(GetArgsValue(sys.argv, "-o"), "w").write(response["result"])
         
         if "-r" in sys.argv:
             print(response["reply"])
